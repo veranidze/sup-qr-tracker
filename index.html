@@ -60,7 +60,9 @@
         // ==================================================================
         // ВАШИ ДАННЫЕ УЖЕ ВСТАВЛЕНЫ
         // ==================================================================
-        const JSONBIN_API_KEY = '$2a$10$iluB48AWq0B3yJvnzUY.Ge31LkmZpjnnSmaVXp2FfXsB18AqUhvBO';
+        // Ключ доступа от jsonbin.io. Найдите его в разделе "API Keys".
+        const JSONBIN_ACCESS_KEY = '$2a$10$iluB48AWq0B3yJvnzUY.Ge31LkmZpjnnSmaVXp2FfXsB18AqUhvBO';
+        // ID вашей "корзины" (bin) в jsonbin.io. Его можно найти в URL после /b/
         const JSONBIN_BIN_ID = '6857e0cf8960c979a5aefee2';
         // ==================================================================
         // ВАШИ ДАННЫЕ TELEGRAM
@@ -77,19 +79,23 @@
             loadingOverlay.style.display = 'block';
             try {
                 const response = await fetch(`${JSONBIN_URL}/latest`, {
-                    headers: { 'X-Master-Key': JSONBIN_API_KEY }
+                    headers: { 'X-Access-Key': JSONBIN_ACCESS_KEY }
                 });
                 if (!response.ok) {
-                    if (response.status === 404) { // Если bin пустой или новый
-                        return {};
-                    }
                     throw new Error(`Ошибка сети: ${response.status}`);
                 }
                 const data = await response.json();
-                return data.record;
+                return data.record || {};
             } catch (error) {
                 console.error("Не удалось получить данные из облака:", error);
-                alert("Ошибка: Не удалось загрузить данные из облака. Проверьте API-ключ и Bin ID.");
+                if (error.message.includes('401')) {
+                    alert("Ошибка 401: Неавторизованный доступ.\n\nЭто означает, что ваш API-ключ (JSONBIN_ACCESS_KEY) или Bin ID неверны, либо у ключа нет прав на чтение.\n\nПожалуйста, перепроверьте эти данные на сайте jsonbin.io и вставьте их заново в код.");
+                } else if (error.message.includes('404')) {
+                    alert("Ошибка 404: Bin не найден.\n\nУбедитесь, что ваш Bin ID правильный.");
+                }
+                else {
+                    alert("Ошибка: Не удалось загрузить данные из облака. Проверьте ваше интернет-соединение и правильность ключей.");
+                }
                 return null;
             } finally {
                 loadingOverlay.style.display = 'none';
@@ -99,17 +105,24 @@
         async function saveCloudData(data) {
             loadingOverlay.style.display = 'block';
             try {
-                await fetch(JSONBIN_URL, {
+                const response = await fetch(JSONBIN_URL, {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-Master-Key': JSONBIN_API_KEY
+                        'X-Access-Key': JSONBIN_ACCESS_KEY
                     },
                     body: JSON.stringify(data)
                 });
+                if (!response.ok) {
+                    throw new Error(`Ошибка сети при сохранении: ${response.status}`);
+                }
             } catch (error) {
                 console.error("Не удалось сохранить данные в облако:", error);
-                alert("Ошибка: Не удалось сохранить данные. Проверьте интернет-соединение.");
+                if (error.message.includes('401')) {
+                    alert("Ошибка 401 при сохранении: Неавторизованный доступ.\n\nЭто означает, что ваш API-ключ (JSONBIN_ACCESS_KEY) не имеет прав на запись в этот Bin.");
+                } else {
+                    alert("Ошибка: Не удалось сохранить данные. Проверьте интернет-соединение.");
+                }
             } finally {
                 loadingOverlay.style.display = 'none';
             }
@@ -131,8 +144,9 @@
 
         // --- Основная логика ---
         window.onload = async function() {
-            if (!JSONBIN_API_KEY || JSONBIN_API_KEY.startsWith('ВАШ_API_КЛЮЧ') || !JSONBIN_BIN_ID || JSONBIN_BIN_ID.startsWith('ВАШ_BIN_ID')) {
-                alert('Пожалуйста, вставьте API-ключ и Bin ID от JSONBin.io в код файла tracker.html');
+            // ИСПРАВЛЕНО: Добавлена проверка формата ключа, чтобы сразу выявить проблему
+            if (JSONBIN_ACCESS_KEY.startsWith('$2a$')) {
+                alert("ВНИМАНИЕ: Ваш API-ключ (JSONBIN_ACCESS_KEY) выглядит неверно. Он не должен начинаться с '$2a$'.\n\nПожалуйста, зайдите в раздел 'API Keys' на сайте jsonbin.io и скопируйте ключ 'X-Access-Key'. Он должен быть длинной строкой из букв и цифр.");
                 return;
             }
 
@@ -157,8 +171,7 @@
                 if (!link.clicks) link.clicks = [];
                 link.clicks.push(Date.now());
                 
-                // Асинхронно сохраняем и уведомляем, не задерживая пользователя
-                saveCloudData(linkData); 
+                await saveCloudData(linkData); 
                 sendTelegramNotification(`🔔 *Новый переход!*\n\n*Источник*: ${link.name}`);
 
                 window.location.href = link.destinationUrl;
