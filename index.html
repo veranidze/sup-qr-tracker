@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Локальный Трекер QR-кодов</title>
+    <title>Облачный Трекер QR-кодов</title>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; margin: 0; background-color: #f4f7f9; color: #333; }
         .container { max-width: 900px; margin: 20px auto; padding: 20px; background-color: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.1); border-radius: 8px; }
@@ -22,54 +22,37 @@
         .copy-btn:hover { background-color: #218838; }
         .delete-btn { background-color: #dc3545; }
         .delete-btn:hover { background-color: #c82333; }
-        .loader-container { text-align: center; padding: 50px; font-size: 20px; display: none; }
-        .filter-section { display: flex; flex-wrap: wrap; gap: 20px; align-items: center; margin-bottom: 20px; padding: 15px; background-color: #eef3f8; border-radius: 8px; }
-        .filter-group { display: flex; flex-direction: column; }
-        .filter-group label { margin-bottom: 5px; font-size: 14px; color: #555; }
+        .loader-container, .loading-overlay { text-align: center; padding: 50px; font-size: 20px; display: none; }
+        .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.8); z-index: 9999; }
     </style>
 </head>
 <body>
 
-    <!-- Это сообщение показывается только при редиректе -->
+    <div id="loading-overlay" class="loader-container">
+        <h1>Загрузка...</h1>
+    </div>
+
     <div id="redirect-message" class="loader-container">
         <h1>Перенаправление...</h1>
         <p>Пожалуйста, подождите.</p>
     </div>
 
-    <!-- Это основная панель управления -->
-    <div id="dashboard" class="container">
+    <div id="dashboard" class="container" style="display: none;">
         <h1>Панель управления трекером</h1>
-
         <form id="create-link-form">
             <h2>Создать новую отслеживаемую ссылку</h2>
             <input type="text" id="link-name" placeholder="Название (например, 'QR на визитке')" required>
-            <input type="url" id="destination-url" placeholder="URL назначения (ссылка на вашего бота https://t.me/...)" required>
+            <input type="url" id="destination-url" placeholder="URL назначения (https://t.me/...)" required>
             <button type="submit">Создать ссылку</button>
         </form>
-
         <h2>Статистика переходов</h2>
         <div class="filter-section">
-             <div class="filter-group">
-                <label for="start-date">Показывать статистику с:</label>
-                <input type="date" id="start-date">
-             </div>
-             <div class="filter-group">
-                <label for="end-date">По:</label>
-                <input type="date" id="end-date">
-             </div>
+             <div class="filter-group"><label for="start-date">Статистика с:</label><input type="date" id="start-date"></div>
+             <div class="filter-group"><label for="end-date">По:</label><input type="date" id="end-date"></div>
         </div>
         <table>
-            <thead>
-                <tr>
-                    <th>Название</th>
-                    <th>Клики (за период)</th>
-                    <th>URL Назначения</th>
-                    <th>Действия</th>
-                </tr>
-            </thead>
-            <tbody id="stats-table-body">
-                <!-- Сюда будут добавляться строки статистики -->
-            </tbody>
+            <thead><tr><th>Название</th><th>Клики (за период)</th><th>URL Назначения</th><th>Действия</th></tr></thead>
+            <tbody id="stats-table-body"></tbody>
         </table>
     </div>
 
@@ -77,136 +60,166 @@
         // ==================================================================
         // ВАШИ ДАННЫЕ УЖЕ ВСТАВЛЕНЫ
         // ==================================================================
+        const JSONBIN_API_KEY = '$2a$10$iluB48AWq0B3yJvnzUY.Ge31LkmZpjnnSmaVXp2FfXsB18AqUhvBO';
+        const JSONBIN_BIN_ID = '6857e0cf8960c979a5aefee2';
+        // ==================================================================
+        // ВАШИ ДАННЫЕ TELEGRAM
         const BOT_TOKEN = '7562433699:AAGQS6SEzs8qPloifYO0_3mTM7jCj29kfW8';
         const CHAT_ID = '711959226';
         // ==================================================================
 
-        // --- ЛОКАЛЬНОЕ ХРАНИЛИЩЕ ДАННЫХ (localStorage) ---
-        let linkData = JSON.parse(localStorage.getItem('qrLinkTrackerData')) || {};
+        const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_BIN_ID}`;
+        let linkData = {};
+        const loadingOverlay = document.getElementById('loading-overlay');
 
-        function saveData() {
-            localStorage.setItem('qrLinkTrackerData', JSON.stringify(linkData));
+        // --- Функции для работы с облачным хранилищем ---
+        async function getCloudData() {
+            loadingOverlay.style.display = 'block';
+            try {
+                const response = await fetch(`${JSONBIN_URL}/latest`, {
+                    headers: { 'X-Master-Key': JSONBIN_API_KEY }
+                });
+                if (!response.ok) {
+                    if (response.status === 404) { // Если bin пустой или новый
+                        return {};
+                    }
+                    throw new Error(`Ошибка сети: ${response.status}`);
+                }
+                const data = await response.json();
+                return data.record;
+            } catch (error) {
+                console.error("Не удалось получить данные из облака:", error);
+                alert("Ошибка: Не удалось загрузить данные из облака. Проверьте API-ключ и Bin ID.");
+                return null;
+            } finally {
+                loadingOverlay.style.display = 'none';
+            }
         }
 
-        // --- ФУНКЦИЯ ОТПРАВКИ УВЕДОМЛЕНИЙ В TELEGRAM ---
-        async function sendTelegramNotification(message) {
-            if (!BOT_TOKEN || BOT_TOKEN === 'ВАШ_ТЕЛЕГРАМ_БОТ_ТОКЕН') {
-                console.warn('Токен бота не настроен. Уведомление не отправлено.');
-                return;
+        async function saveCloudData(data) {
+            loadingOverlay.style.display = 'block';
+            try {
+                await fetch(JSONBIN_URL, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Master-Key': JSONBIN_API_KEY
+                    },
+                    body: JSON.stringify(data)
+                });
+            } catch (error) {
+                console.error("Не удалось сохранить данные в облако:", error);
+                alert("Ошибка: Не удалось сохранить данные. Проверьте интернет-соединение.");
+            } finally {
+                loadingOverlay.style.display = 'none';
             }
+        }
+
+        // --- Функция отправки уведомлений в Telegram ---
+        async function sendTelegramNotification(message) {
             const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
             try {
                 await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        chat_id: CHAT_ID,
-                        text: message,
-                        parse_mode: 'Markdown'
-                    })
+                    body: JSON.stringify({ chat_id: CHAT_ID, text: message, parse_mode: 'Markdown' })
                 });
             } catch (error) {
                 console.error('Ошибка отправки уведомления в Telegram:', error);
             }
         }
 
-        // --- ОСНОВНАЯ ЛОГИКА ---
-        window.onload = function() {
+        // --- Основная логика ---
+        window.onload = async function() {
+            if (!JSONBIN_API_KEY || JSONBIN_API_KEY.startsWith('ВАШ_API_КЛЮЧ') || !JSONBIN_BIN_ID || JSONBIN_BIN_ID.startsWith('ВАШ_BIN_ID')) {
+                alert('Пожалуйста, вставьте API-ключ и Bin ID от JSONBin.io в код файла tracker.html');
+                return;
+            }
+
+            linkData = await getCloudData();
+            if (linkData === null) return;
+
             const urlParams = new URLSearchParams(window.location.search);
             const trackCode = urlParams.get('track');
 
             if (trackCode) {
-                handleTracking(trackCode);
+                await handleTracking(trackCode);
             } else {
                 initializeDashboard();
             }
         };
 
-        // --- РЕЖИМ ОТСЛЕЖИВАНИЯ ---
+        // --- Режим отслеживания ---
         async function handleTracking(code) {
-            document.getElementById('dashboard').style.display = 'none';
             document.getElementById('redirect-message').style.display = 'block';
-
             const link = linkData[code];
             if (link) {
-                if (!link.clicks) {
-                    link.clicks = [];
-                }
+                if (!link.clicks) link.clicks = [];
                 link.clicks.push(Date.now());
-                saveData();
                 
-                const message = `🔔 *Новый переход!*\n\n*Источник*: ${link.name}`;
-                await sendTelegramNotification(message);
+                // Асинхронно сохраняем и уведомляем, не задерживая пользователя
+                saveCloudData(linkData); 
+                sendTelegramNotification(`🔔 *Новый переход!*\n\n*Источник*: ${link.name}`);
 
                 window.location.href = link.destinationUrl;
             } else {
                 document.getElementById('redirect-message').innerHTML = '<h1>Ошибка: Ссылка не найдена</h1>';
-                await sendTelegramNotification(`⚠️ Кто-то перешел по несуществующей ссылке: *${code}*`);
+                sendTelegramNotification(`⚠️ Кто-то перешел по несуществующей ссылке: *${code}*`);
             }
         }
 
-        // --- РЕЖИМ АДМИНИСТРАТОРА ---
+        // --- Режим администратора ---
         function initializeDashboard() {
-            const createLinkForm = document.getElementById('create-link-form');
-            const startDateInput = document.getElementById('start-date');
-            const endDateInput = document.getElementById('end-date');
-
-            createLinkForm.addEventListener('submit', createNewLink);
-            startDateInput.addEventListener('change', renderStats);
-            endDateInput.addEventListener('change', renderStats);
-
+            document.getElementById('dashboard').style.display = 'block';
+            document.getElementById('create-link-form').addEventListener('submit', createNewLink);
+            document.getElementById('start-date').addEventListener('change', renderStats);
+            document.getElementById('end-date').addEventListener('change', renderStats);
             renderStats();
         }
 
-        function createNewLink(event) {
+        async function createNewLink(event) {
             event.preventDefault();
-            const nameInput = document.getElementById('link-name');
-            const urlInput = document.getElementById('destination-url');
-
-            const name = nameInput.value.trim();
-            const url = urlInput.value.trim();
+            const name = document.getElementById('link-name').value.trim();
+            const url = document.getElementById('destination-url').value.trim();
 
             if (name && url) {
                 const code = name.toLowerCase().replace(/[^a-z0-9а-яё]/gi, '-').replace(/-+/g, '-') + '-' + Date.now().toString(36);
-                
-                linkData[code] = {
-                    name: name,
-                    destinationUrl: url,
-                    clicks: []
-                };
-                saveData();
+                linkData[code] = { name: name, destinationUrl: url, clicks: [] };
+                await saveCloudData(linkData);
                 renderStats();
-
-                nameInput.value = '';
-                urlInput.value = '';
+                document.getElementById('link-name').value = '';
+                document.getElementById('destination-url').value = '';
             }
         }
-
+        
+        async function handleDeleteLink(event) {
+            const code = event.target.getAttribute('data-code');
+            const linkName = linkData[code]?.name || 'эту ссылку';
+            
+            if (confirm(`Вы уверены, что хотите удалить ссылку "${linkName}"?`)) {
+                delete linkData[code];
+                await saveCloudData(linkData);
+                renderStats();
+            }
+        }
+        
         function renderStats() {
             const tableBody = document.getElementById('stats-table-body');
             const startDateInput = document.getElementById('start-date');
             const endDateInput = document.getElementById('end-date');
             
             const filterStartTimestamp = startDateInput.value ? new Date(startDateInput.value).getTime() : 0;
-            
             let filterEndTimestamp = Infinity;
             if (endDateInput.value) {
                 const endDate = new Date(endDateInput.value);
                 endDate.setHours(23, 59, 59, 999);
                 filterEndTimestamp = endDate.getTime();
             }
-
             tableBody.innerHTML = '';
-
             for (const code in linkData) {
                 const link = linkData[code];
-                
-                const clicksInPeriod = (link.clicks || []).filter(timestamp => 
-                    timestamp >= filterStartTimestamp && timestamp <= filterEndTimestamp
-                ).length;
-
+                const clicksInPeriod = (link.clicks || []).filter(ts => ts >= filterStartTimestamp && ts <= filterEndTimestamp).length;
                 const row = document.createElement('tr');
-                
                 row.innerHTML = `
                     <td>${link.name}</td>
                     <td><b>${clicksInPeriod}</b></td>
@@ -218,37 +231,17 @@
                 `;
                 tableBody.appendChild(row);
             }
-            
-            document.querySelectorAll('.copy-btn').forEach(button => {
-                button.addEventListener('click', copyTrackingLink);
-            });
-
-            document.querySelectorAll('.delete-btn').forEach(button => {
-                button.addEventListener('click', handleDeleteLink);
-            });
+            document.querySelectorAll('.copy-btn').forEach(b => b.addEventListener('click', copyTrackingLink));
+            document.querySelectorAll('.delete-btn').forEach(b => b.addEventListener('click', handleDeleteLink));
         }
         
         function copyTrackingLink(event) {
             const code = event.target.getAttribute('data-code');
             const trackingUrl = `${window.location.href.split('?')[0]}?track=${code}`;
-            
             navigator.clipboard.writeText(trackingUrl).then(() => {
                 event.target.textContent = 'Скопировано!';
                 setTimeout(() => { event.target.textContent = 'Копировать'; }, 2000);
-            }).catch(err => {
-                prompt('Не удалось скопировать автоматически. Скопируйте вручную:', trackingUrl);
-            });
-        }
-
-        function handleDeleteLink(event) {
-            const code = event.target.getAttribute('data-code');
-            const linkName = linkData[code]?.name || 'эту ссылку';
-            
-            if (confirm(`Вы уверены, что хотите удалить ссылку "${linkName}"? Все данные о кликах будут потеряны.`)) {
-                delete linkData[code]; // Удаляем ключ из объекта
-                saveData(); // Сохраняем изменения в localStorage
-                renderStats(); // Перерисовываем таблицу
-            }
+            }).catch(err => prompt('Не удалось скопировать. Скопируйте вручную:', trackingUrl));
         }
     </script>
 </body>
