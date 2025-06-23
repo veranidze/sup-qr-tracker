@@ -3,205 +3,258 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Облачный Трекер QR-кодов</title>
+    <title>Music Point - Бронирование</title>
+
+    <!-- Подключение Leaflet.js для карты -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <!-- Подключение Tailwind CSS для стилей -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; margin: 0; background-color: #f4f7f9; color: #333; }
-        .container { max-width: 900px; margin: 20px auto; padding: 20px; background-color: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.1); border-radius: 8px; }
-        h1, h2 { color: #1a2b4d; border-bottom: 2px solid #e1e8ed; padding-bottom: 10px; }
-        form { background-color: #fdfdfe; padding: 20px; border-radius: 8px; border: 1px solid #e1e8ed; margin-bottom: 20px; }
-        input[type="text"], input[type="url"], input[type="date"] { width: 100%; padding: 10px; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
-        button { background-color: #007bff; color: white; padding: 10px 15px; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; transition: background-color 0.2s; }
-        button:hover { background-color: #0056b3; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { text-align: left; padding: 12px; border-bottom: 1px solid #ddd; word-break: break-all; }
-        th { background-color: #f2f2f2; }
-        tr:hover { background-color: #f5f5f5; }
-        .actions-cell { display: flex; gap: 8px; flex-wrap: wrap; }
-        .copy-btn, .delete-btn { font-size: 12px; padding: 5px 10px; color: white; border-radius: 4px; cursor: pointer; border: none;}
-        .copy-btn { background-color: #28a745; }
-        .copy-btn:hover { background-color: #218838; }
-        .delete-btn { background-color: #dc3545; }
-        .delete-btn:hover { background-color: #c82333; }
-        .loader-container, .loading-overlay { text-align: center; padding: 50px; font-size: 20px; display: none; }
-        .loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.8); z-index: 9999; }
-        .filter-section { display: flex; flex-wrap: wrap; gap: 20px; align-items: center; margin-bottom: 20px; padding: 15px; background-color: #eef3f8; border-radius: 8px; }
-        .filter-group { display: flex; flex-direction: column; }
-        .filter-group label { margin-bottom: 5px; font-size: 14px; color: #555; }
+        /* Основные стили */
+        body {
+            /* Заменен шрифт на системный шрифт Apple с фолбэками */
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            overflow: hidden; 
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background-color: #1e293b; /* slate-800 */
+        }
+        /* Контейнер для карты */
+        #map-container {
+            position: relative;
+            flex-grow: 1;
+        }
+        #map {
+            height: 100%;
+            width: 100%;
+            z-index: 10;
+        }
+        /* Стили для модального окна */
+        #schedule-modal {
+            transition: opacity 0.3s ease-in-out;
+        }
+        /* Кастомный стиль для маркеров Leaflet */
+        .custom-icon {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            border-radius: 50%;
+            border: 2px solid white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+            background: #2563eb; /* blue-600 */
+        }
+        .custom-icon svg {
+             color: white;
+        }
+
+        .user-location-icon {
+            background-color: #3b82f6;
+            border-radius: 50%;
+            border: 3px solid #ffffff;
+            box-shadow: 0 0 0 4px #3b82f6;
+        }
+        
+        /* Стили для "стеклянного" эффекта */
+        .glass-effect {
+            /* Установлена непрозрачность 50% (альфа-канал 0.5) */
+            background-color: rgba(30, 41, 59, 0.5); 
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
     </style>
 </head>
-<body>
+<body class="bg-slate-800">
 
-    <div id="loading-overlay" class="loader-container"><h1>Загрузка...</h1></div>
+    <!-- Заголовок приложения -->
+    <header class="bg-slate-900 text-white text-center p-4 shadow-lg z-20">
+        <h1 class="text-xl font-bold">Music Point Batumi</h1>
+        <p class="text-sm text-slate-400">Нажмите на точку, чтобы посмотреть расписание</p>
+    </header>
 
-    <div id="dashboard" class="container" style="display: none;">
-        <h1>Панель управления трекером</h1>
-        <form id="create-link-form">
-            <h2>Создать новую отслеживаемую ссылку</h2>
-            <input type="text" id="link-name" placeholder="Название (например, 'QR на визитке')" required>
-            <input type="url" id="destination-url" placeholder="URL назначения (https://t.me/...)" required>
-            <button type="submit">Создать ссылку</button>
-        </form>
-        <h2>Статистика переходов</h2>
-        <div class="filter-section">
-             <div class="filter-group"><label for="start-date">Статистика с:</label><input type="date" id="start-date"></div>
-             <div class="filter-group"><label for="end-date">По:</label><input type="date" id="end-date"></div>
+    <!-- Контейнер для карты и кнопки геолокации -->
+    <div id="map-container">
+        <div id="map"></div>
+        <!-- Контейнер для кнопки геолокации и надписи -->
+        <div class="absolute bottom-16 right-5 z-20 flex flex-col items-center space-y-2">
+            <span class="text-xs font-semibold text-slate-800 bg-white/80 backdrop-blur-sm px-2 py-1 rounded-full shadow-md">Где я?</span>
+            <button id="geolocate-btn" class="bg-white p-3 rounded-full shadow-lg hover:bg-gray-100 active:scale-95 transition-all" title="Найти меня">
+                <svg class="w-6 h-6 text-gray-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                     <path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9 9 0 01-9-9 9 9 0 019-9m9 9a9 9 0 01-9 9m-9-9h18m-9-9v18" />
+                </svg>
+            </button>
         </div>
-        <table>
-            <thead><tr><th>Название</th><th>Клики (за период)</th><th>URL Назначения</th><th>Действия</th></tr></thead>
-            <tbody id="stats-table-body"></tbody>
-        </table>
+    </div>
+
+    <!-- Модальное окно для отображения расписания -->
+    <div id="schedule-modal" class="fixed inset-0 z-50 flex justify-center items-center p-4 opacity-0 pointer-events-none">
+        <div id="schedule-content" class="glass-effect rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col transform scale-95 transition-transform duration-300">
+            <!-- Заголовок модального окна -->
+            <div class="flex justify-between items-center p-3 sm:p-4 border-b border-white/20 flex-shrink-0">
+                <h2 id="schedule-title" class="text-lg sm:text-xl font-bold text-white">Расписание точки</h2>
+                <button id="close-modal-btn" class="text-slate-300 hover:text-white transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <!-- Контейнер для самого расписания с прокруткой -->
+            <div id="schedule-grid" class="p-3 sm:p-4 overflow-y-auto">
+                <!-- Сюда будет динамически вставляться сетка расписания -->
+            </div>
+            <!-- Футер модального окна с кнопками -->
+            <div id="booking-buttons" class="p-3 sm:p-4 border-t border-white/20 flex-shrink-0">
+                <!-- Сюда будут вставляться кнопки -->
+            </div>
+        </div>
     </div>
 
     <script>
-        // ==================================================================
-        // ВАШ URL ВЕБ-ПРИЛОЖЕНИЯ УЖЕ ВСТАВЛЕН
-        // ==================================================================
-        const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbyFSd5aiBy-s0HzjwBWL43vIcTX06Ac3qpAOAxQYscxcT9PsEY7VLVeP5MEx3PcUPCliw/exec';
-        // ==================================================================
-        // ВАШИ ДАННЫЕ TELEGRAM
-        const BOT_TOKEN = '7562433699:AAGQS6SEzs8qPloifYO0_3mTM7jCj29kfW8';
-        const CHAT_ID = '711959226';
-        // ==================================================================
+        const musicPoints = [
+            { id: 1, name: "Music Point на Чавчавадзе", address: "ул. Чавчавадзе, 5", coords: [41.6433, 41.6322], contacts: { telegram: "https://t.me/example_user", whatsapp: "https://wa.me/995000000001", instagram: "https://instagram.com/example" } },
+            { id: 2, name: "Music Point у Порта", address: "ул. Гогебашвили, 33", coords: [41.6515, 41.6445], contacts: { telegram: "https://t.me/example_user2", whatsapp: "https://wa.me/995000000002", instagram: "https://instagram.com/example2" } },
+            { id: 3, name: "Music Point в Старом городе", address: "ул. Звиада Гамсахурдия, 1/5", coords: [41.6468, 41.6380], contacts: { telegram: "https://t.me/example_user3", whatsapp: "https://wa.me/995000000003", instagram: "https://instagram.com/example3" } }
+        ];
 
-        let linkData = {};
-        const loadingOverlay = document.getElementById('loading-overlay');
+        const map = L.map('map').setView([41.646, 41.636], 14);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>', subdomains: 'abcd', maxZoom: 20
+        }).addTo(map);
+        
+        const modal = document.getElementById('schedule-modal');
+        const modalContent = document.getElementById('schedule-content');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const scheduleTitle = document.getElementById('schedule-title');
+        const scheduleGrid = document.getElementById('schedule-grid');
+        const bookingButtonsContainer = document.getElementById('booking-buttons');
+        const geolocateBtn = document.getElementById('geolocate-btn');
+        let userMarker = null;
 
-        async function getCloudData() {
-            loadingOverlay.style.display = 'block';
-            try {
-                const response = await fetch(WEB_APP_URL);
-                if (!response.ok) throw new Error(`Ошибка сети: ${response.status}`);
-                const textData = await response.text();
-                // Google Apps Script может возвращать пустую строку, если данных нет
-                return textData ? JSON.parse(textData) : {};
-            } catch (error) {
-                console.error("Не удалось получить данные:", error);
-                alert("Ошибка: Не удалось загрузить данные из облака. Проверьте URL вашего веб-приложения.");
-                return null;
-            } finally {
-                loadingOverlay.style.display = 'none';
+        function generateMockSchedule() {
+            const schedule = {};
+            const today = new Date();
+            const weekdays = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+            const names = ["Александр Константинопольский", "Eka K.", "Георгий & группа", "Liza S.", "Репетиция The Band"];
+            for (let i = 0; i < 7; i++) {
+                const day = new Date(today);
+                day.setDate(today.getDate() + i);
+                const dayKey = `${String(day.getDate()).padStart(2, '0')}.${String(day.getMonth() + 1).padStart(2, '0')}`;
+                const dayName = weekdays[day.getDay()];
+                schedule[dayKey] = { dayName: dayName, slots: [] };
+                for (let hour = 10; hour < 23; hour++) {
+                    const isBusy = Math.random() > 0.6;
+                    schedule[dayKey].slots.push({
+                        time: `${hour}:00`, isBusy: isBusy,
+                        occupant: isBusy ? names[Math.floor(Math.random() * names.length)] : null
+                    });
+                }
             }
+            return schedule;
         }
 
-        async function saveCloudData(data) {
-            loadingOverlay.style.display = 'block';
-            try {
-                // Использование POST для отправки данных, чтобы избежать проблем с CORS
-                const response = await fetch(WEB_APP_URL, {
-                    method: 'POST',
-                    body: JSON.stringify(data),
-                    headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        function displaySchedule(point) {
+            scheduleTitle.textContent = `Расписание: ${point.name}`;
+            const generatedSchedule = generateMockSchedule();
+            scheduleGrid.innerHTML = '';
+            bookingButtonsContainer.innerHTML = '';
+            const gridContainer = document.createElement('div');
+            gridContainer.className = 'grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3';
+            for (const dateKey in generatedSchedule) {
+                const dayData = generatedSchedule[dateKey];
+                const dayCard = document.createElement('div');
+                dayCard.className = 'bg-slate-900/80 rounded-xl p-2 sm:p-3 border border-white/10 flex flex-col';
+                const dayHeader = document.createElement('h3');
+                dayHeader.className = 'text-white font-semibold text-center text-sm mb-2';
+                dayHeader.textContent = `${dayData.dayName}, ${dateKey}`;
+                dayCard.appendChild(dayHeader);
+                const slotsList = document.createElement('div');
+                slotsList.className = 'space-y-1.5 flex-grow';
+                dayData.slots.forEach(slot => {
+                    const slotDiv = document.createElement('div');
+                    slotDiv.className = `p-1.5 rounded-md text-xs border min-h-[40px] flex flex-col justify-center`;
+                    if (slot.isBusy) {
+                        slotDiv.classList.add('bg-red-500/30', 'text-red-300/80', 'border-red-500/40', 'text-left', 'justify-start');
+                        slotDiv.innerHTML = `<span class="font-semibold">${slot.time}</span><span class="opacity-90 break-words">${slot.occupant}</span>`;
+                    } else {
+                        slotDiv.classList.add('bg-green-500/30', 'text-green-300/90', 'border-green-500/40', 'text-center');
+                        slotDiv.textContent = `${slot.time} - Свободно`;
+                    }
+                    slotsList.appendChild(slotDiv);
                 });
-                if (!response.ok) throw new Error(`Ошибка сети при сохранении: ${response.status}`);
-            } catch (error) {
-                console.error("Не удалось сохранить данные:", error);
-                alert("Ошибка: Не удалось сохранить данные. Проверьте интернет-соединение.");
-            } finally {
-                loadingOverlay.style.display = 'none';
+                dayCard.appendChild(slotsList);
+                gridContainer.appendChild(dayCard);
             }
+            scheduleGrid.appendChild(gridContainer);
+            const bookingLabel = document.createElement('h4');
+            bookingLabel.textContent = 'Забронировать через:';
+            bookingLabel.className = 'text-xs sm:text-sm font-semibold text-slate-300 mb-2';
+            bookingButtonsContainer.appendChild(bookingLabel);
+            const buttonWrapper = document.createElement('div');
+            buttonWrapper.className = 'flex flex-col sm:flex-row gap-2';
+            const buttons = [
+                { text: 'Telegram', href: point.contacts.telegram, icon: `<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M9.78 18.65l.28-4.23l7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3L3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.57c-.28 1.13-1.04 1.4-1.74 .88l-4.98-3.65l-2.45 2.35c-.27.27-.5.4-.86.4z"/></svg>`, style: 'bg-sky-500 hover:bg-sky-600' },
+                { text: 'WhatsApp', href: point.contacts.whatsapp, icon: `<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M19.11 4.91C17.22 3 14.66 1.95 12 1.95c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.5 1.32 5l-1.44 5.25L7.17 21c1.44.8 3.12 1.25 4.83 1.25 5.46 0 9.91-4.45 9.91-9.91 0-2.66-1.05-5.22-2.94-7.11zm-7.11 15.12c-1.49 0-2.97-.4-4.29-1.15l-.3-.18-3.18.84.86-3.1-.2-.31c-.82-1.38-1.25-2.94-1.25-4.51 0-4.38 3.56-7.94 7.94-7.94s7.94 3.56 7.94 7.94-3.56 7.94-7.94 7.94zm4.28-5.45c-.23-.12-1.35-.67-1.56-.74s-.36-.12-.51.12-.59.74-.72.89-.26.18-.48.06c-.23-.12-.95-.35-1.81-1.12-.67-.59-1.12-1.33-1.25-1.56s-.1-.36.06-.48c.11-.11.23-.29.35-.44s.16-.23.23-.38.03-.29-.03-.41c-.06-.12-.51-1.23-.7-1.68s-.36-.38-.51-.38-.29-.01-.44-.01h-.08c-.15 0-.39.06-.59.29s-.8 1.09-.8 2.64.82 3.06.94 3.28 1.59 2.44 3.86 3.43c.54.23.97.37 1.3.48.56.18 1.07.15 1.46.09.44-.06 1.35-.55 1.54-1.08s.19-1-.03-1.12z"/></svg>`, style: 'bg-green-500 hover:bg-green-600' },
+                { text: 'Instagram', href: point.contacts.instagram, icon: `<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M7.8,2H16.2C19.4,2 22,4.6 22,7.8V16.2A5.8,5.8 0 0,1 16.2,22H7.8C4.6,22 2,19.4 2,16.2V7.8A5.8,5.8 0 0,1 7.8,2M7.6,4A3.6,3.6 0 0,0 4,7.6V16.4C4,18.39 5.61,20 7.6,20H16.4A3.6,3.6 0 0,0 20,16.4V7.6C20,5.61 18.39,4 16.4,4H7.6M17.25,5.5A1.25,1.25 0 0,1 18.5,6.75A1.25,1.25 0 0,1 17.25,8A1.25,1.25 0 0,1 16,6.75A1.25,1.25 0 0,1 17.25,5.5M12,7A5,5 0 0,1 17,12A5,5 0 0,1 12,17A5,5 0 0,1 7,12A5,5 0 0,1 12,7M12,9A3,3 0 0,0 9,12A3,3 0 0,0 12,15A3,3 0 0,0 15,12A3,3 0 0,0 12,9Z"/></svg>`, style: 'bg-gradient-to-r from-purple-500 via-pink-500 to-orange-500 hover:opacity-90' }
+            ];
+            buttons.forEach(btnInfo => {
+                const button = document.createElement('a');
+                button.href = btnInfo.href; button.target = '_blank'; button.rel = 'noopener noreferrer';
+                button.className = `w-full sm:w-auto flex-grow text-center p-2 rounded-lg font-semibold transition-all flex items-center justify-center space-x-2 text-white text-sm ${btnInfo.style}`;
+                button.innerHTML = `${btnInfo.icon}<span>${btnInfo.text}</span>`;
+                buttonWrapper.appendChild(button);
+            });
+            bookingButtonsContainer.appendChild(buttonWrapper);
+            modal.classList.remove('opacity-0', 'pointer-events-none');
+            modalContent.classList.remove('scale-95');
         }
 
-        // Эта функция больше не нужна в HTML, так как уведомления отправляются на стороне сервера (в Google Script)
-        // Но оставим её для возможных будущих доработок или отладки
-        async function sendTelegramNotification(linkName) {
-           console.log("Уведомление для", linkName, "будет отправлено сервером.");
+        function closeModal() {
+            modal.classList.add('opacity-0', 'pointer-events-none');
+            modalContent.classList.add('scale-95');
         }
 
-        window.onload = async function() {
-            if (WEB_APP_URL === 'ВАШ_URL_ВЕБ_ПРИЛОЖЕНИЯ_GOOGLE') {
-                alert('Пожалуйста, вставьте URL вашего веб-приложения из Google Apps Script в код файла tracker.html');
-                return;
-            }
-            // Переход по QR-коду теперь обрабатывается Google скриптом, здесь только админка
-            initializeDashboard();
-        };
+        musicPoints.forEach(point => {
+            const customIcon = L.divIcon({ className: 'custom-icon', html: `<svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>`, iconSize: [30, 30], iconAnchor: [15, 15] });
+            const marker = L.marker(point.coords, { icon: customIcon }).addTo(map);
+            marker.bindPopup(`<b>${point.name}</b><br>${point.address}`);
+            marker.on('click', () => { setTimeout(() => displaySchedule(point), 300); });
+        });
 
-        async function initializeDashboard() {
-            linkData = await getCloudData();
-            if (linkData === null) return;
-            
-            document.getElementById('dashboard').style.display = 'block';
-            document.getElementById('create-link-form').addEventListener('submit', createNewLink);
-            document.getElementById('start-date').addEventListener('change', renderStats);
-            document.getElementById('end-date').addEventListener('change', renderStats);
-            renderStats();
-        }
+        // --- ЛОГИКА ГЕОЛОКАЦИИ ---
+        geolocateBtn.addEventListener('click', () => {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const { latitude, longitude } = position.coords;
+                        const userCoords = [latitude, longitude];
+                        const userIcon = L.divIcon({ className: 'user-location-icon', iconSize: [20, 20] });
+                        if (userMarker) {
+                            userMarker.setLatLng(userCoords);
+                        } else {
+                            userMarker = L.marker(userCoords, { icon: userIcon }).addTo(map);
+                        }
+                        map.setView(userCoords, 15);
+                        userMarker.bindPopup('Вы здесь').openPopup();
+                    },
+                    (error) => {
+                        console.error("Ошибка геолокации:", error);
+                        alert("Не удалось определить вашу геопозицию. Убедитесь, что вы разрешили доступ к местоположению в настройках браузера.");
+                    }
+                );
+            } else {
+                alert("Геолокация не поддерживается этим браузером.");
+            }
+        });
 
-        async function createNewLink(event) {
-            event.preventDefault();
-            const name = document.getElementById('link-name').value.trim();
-            const url = document.getElementById('destination-url').value.trim();
-
-            if (name && url) {
-                const code = name.toLowerCase().replace(/[^a-z0-9а-яё]/gi, '-').replace(/-+/g, '-') + '-' + Date.now().toString(36);
-                linkData[code] = { name: name, destinationUrl: url, clicks: [] };
-                await saveCloudData(linkData);
-                // Задержка, чтобы дать Google время обработать сохранение
-                setTimeout(async () => {
-                    linkData = await getCloudData(); 
-                    renderStats();
-                }, 2000); // Немного увеличим задержку для надежности
-                document.getElementById('link-name').value = '';
-                document.getElementById('destination-url').value = '';
-            }
-        }
-        
-        async function handleDeleteLink(event) {
-            const code = event.target.getAttribute('data-code');
-            const linkName = linkData[code]?.name || 'эту ссылку';
-            
-            if (confirm(`Вы уверены, что хотите удалить ссылку "${linkName}"?`)) {
-                delete linkData[code];
-                await saveCloudData(linkData);
-                 // Задержка, чтобы дать Google время обработать сохранение
-                setTimeout(async () => {
-                    linkData = await getCloudData();
-                    renderStats();
-                }, 2000); // Немного увеличим задержку для надежности
-            }
-        }
-        
-        function renderStats() {
-            const tableBody = document.getElementById('stats-table-body');
-            const startDateInput = document.getElementById('start-date');
-            const endDateInput = document.getElementById('end-date');
-            
-            const filterStartTimestamp = startDateInput.value ? new Date(startDateInput.value).getTime() : 0;
-            let filterEndTimestamp = Infinity;
-            if (endDateInput.value) {
-                const endDate = new Date(endDateInput.value);
-                endDate.setHours(23, 59, 59, 999);
-                filterEndTimestamp = endDate.getTime();
-            }
-            tableBody.innerHTML = '';
-            if (!linkData) return;
-            for (const code in linkData) {
-                const link = linkData[code];
-                const clicksInPeriod = (link.clicks || []).filter(ts => ts >= filterStartTimestamp && ts <= filterEndTimestamp).length;
-                const row = document.createElement('tr');
-                const trackingUrl = `${WEB_APP_URL}?track=${code}`;
-                row.innerHTML = `
-                    <td>${link.name}</td>
-                    <td><b>${clicksInPeriod}</b></td>
-                    <td><a href="${link.destinationUrl}" target="_blank">${link.destinationUrl}</a></td>
-                    <td class="actions-cell">
-                        <button class="copy-btn" data-url="${trackingUrl}">Копировать</button>
-                        <button class="delete-btn" data-code="${code}">Удалить</button>
-                    </td>
-                `;
-                tableBody.appendChild(row);
-            }
-            document.querySelectorAll('.copy-btn').forEach(b => b.addEventListener('click', copyTrackingLink));
-            document.querySelectorAll('.delete-btn').forEach(b => b.addEventListener('click', handleDeleteLink));
-        }
-        
-        function copyTrackingLink(event) {
-            const trackingUrl = event.target.getAttribute('data-url');
-            navigator.clipboard.writeText(trackingUrl).then(() => {
-                event.target.textContent = 'Скопировано!';
-                setTimeout(() => { event.target.textContent = 'Копировать'; }, 2000);
-            }).catch(err => prompt('Не удалось скопировать. Скопируйте вручную:', trackingUrl));
-        }
+        closeModalBtn.addEventListener('click', closeModal);
+        modal.addEventListener('click', (event) => { if (event.target === modal) { closeModal(); } });
+        document.addEventListener('keydown', (event) => { if (event.key === 'Escape') { closeModal(); } });
     </script>
 </body>
 </html>
